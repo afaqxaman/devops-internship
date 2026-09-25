@@ -1,127 +1,59 @@
-# MyApp - Docker Containerization (Task 2)
+MyApp - Docker Containerization (Task 2)
 
-## Overview
-Ye ek simple Node.js Express web application hai jise Docker ke zariye containerize kiya gaya hai. Multi-stage Dockerfile use kiya gaya hai taake final image ka size chota rahe aur production-ready ho.
+Overview This is a simple Node.js Express web application that has been containerized using Docker. A multi-stage Dockerfile is used to keep the final image small and production-ready.
 
----
+Project Structure devops internship/ server.js server.test.js package.json Dockerfile .dockerignore .gitignore README.md
 
-## Project Structure
-```
-devops internship/
-  server.js
-  package.json
-  Dockerfile
-  .dockerignore
-  README.md
-```
+Step 1: Application Code (server.js)
 
----
+const express = require('express'); const app = express(); const PORT = process.env.PORT || 3000;
 
-## Step 1: Application Code (server.js)
+app.get('/', (req, res) => { const APP_NAME = process.env.APP_NAME || 'MyApp'; res.send(Hello from ${APP_NAME}, running in Docker!); });
 
-```javascript
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => { console.log(Server is running on port ${PORT}); });
 
-app.get('/', (req, res) => {
-  const APP_NAME = process.env.APP_NAME || 'MyApp';
-  res.send(`Hello from ${APP_NAME}, Docker mein chal raha hai!`);
-});
+This is a basic Express server that responds to an HTTP GET request. The APP_NAME value comes from an environment variable rather than being hardcoded in the code, which demonstrates secure environment variable handling.
 
-app.listen(PORT, () => {
-  console.log(`Server chal raha hai port ${PORT} par`);
-});
-```
+Step 2: Multi-Stage Dockerfile
 
-**Explanation:** Ye ek basic Express server hai jo ek HTTP GET request ka jawab deta hai. `APP_NAME` environment variable se aata hai, isliye code ke andar hardcode nahi hai — ye secure environment variable handling ka example hai.
+FROM node:20-alpine AS builder WORKDIR /app COPY package*.json ./ RUN npm install COPY . .
 
----
+FROM node:20-alpine WORKDIR /app COPY --from=builder /app/node_modules ./node_modules COPY --from=builder /app/server.js ./ COPY --from=builder /app/package.json ./
 
-## Step 2: Multi-Stage Dockerfile
+EXPOSE 3000 CMD ["node", "server.js"]
 
-```dockerfile
-# ---- Stage 1: Builder ----
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
+Stage 1 (builder) installs dependencies and copies the application code. Stage 2 (final) copies only the necessary files from the builder stage, which reduces the final image size since build tools and extra files are not included. EXPOSE 3000 indicates that the application inside the container runs on port 3000.
 
-# ---- Stage 2: Final lightweight image ----
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/server.js ./
-COPY --from=builder /app/package.json ./
+.dockerignore contains: node_modules .git
 
-EXPOSE 3000
-CMD ["node", "server.js"]
-```
+This tells Docker which files to skip when building the image, so the build is faster and the image doesn't include unnecessary files.
 
-**Explanation:**
-- **Stage 1 (builder):** Dependencies install karta hai aur code copy karta hai.
-- **Stage 2 (final):** Sirf zaroori files (node_modules, server.js, package.json) builder se copy karta hai — is se image ka size kaafi kam ho jata hai, kyunki build tools aur extra files final image mein nahi jatin.
-- **EXPOSE 3000:** Batata hai ke container ke andar app port 3000 par chal rahi hai.
+Step 3: Build, Run and Environment Variables
 
-### .dockerignore
-```
-node_modules
-.git
-```
-**Explanation:** Ye file batati hai Docker ko konsi cheezein image build karte waqt ignore karni hain (taake unnecessary files image mein na jayen aur build fast ho).
+Build the image: docker build -t myapp .
 
----
+Run the container with an environment variable: docker run -p 3000:3000 -e APP_NAME=ProgreeApp myapp
 
-## Step 3: Build, Run & Environment Variables
+-p 3000:3000 maps port 3000 on the host machine to port 3000 inside the container. Format is HOST_PORT:CONTAINER_PORT. -e APP_NAME=ProgreeApp passes an environment variable securely at runtime, without hardcoding it in the Dockerfile.
 
-### Image build karna:
-```bash
-docker build -t myapp .
-```
+Verify the container is running: docker ps
 
-### Container run karna (environment variable ke sath):
-```bash
-docker run -p 3000:3000 -e APP_NAME=ProgreeApp myapp
-```
+The PORTS column should show: 0.0.0.0:3000->3000/tcp
 
-**Explanation:**
-- `-p 3000:3000` → Host machine ka port 3000 ko container ke port 3000 se map karta hai (Port Routing Map). Format: `HOST_PORT:CONTAINER_PORT`.
-- `-e APP_NAME=ProgreeApp` → Environment variable ko secure tareeqe se runtime par pass karta hai, Dockerfile mein hardcode kiye bagair.
+Result in the browser at http://localhost:3000: Hello from ProgreeApp, running in Docker!
 
-### Verify karna container chal rahi hai:
-```bash
-docker ps
-```
-Expected output mein PORTS column mein dikhna chahiye:
-```
-0.0.0.0:3000->3000/tcp
-```
+Step 4: CI/CD Pipeline (GitHub Actions)
 
-### Result (Browser mein `http://localhost:3000`):
-```
-Hello from ProgreeApp, Docker mein chal raha hai!
-```
+A workflow file is added at .github/workflows/main.yml. It runs automatically whenever code is pushed to the main branch. It checks out the code, sets up Node.js, installs dependencies, runs the linter, runs tests, and logs the pipeline status.
 
----
+A basic test file server.test.js was added so the test step has something to run:
 
-## Environment Variables Reference
+test('sample test - basic math check', () => { expect(1 + 1).toBe(2); });
 
-| Variable   | Description                          | Default   |
-|------------|---------------------------------------|-----------|
-| APP_NAME   | App ka naam jo response mein dikhta hai | MyApp   |
-| PORT       | Server konse port par chalega         | 3000      |
+The node_modules folder is excluded from the repository using .gitignore, since it is regenerated automatically by npm install during the pipeline run.
 
-## Port Mapping Reference
+Environment Variables Reference APP_NAME - App name displayed in the response - default is MyApp PORT - Port on which the server runs - default is 3000
 
-| Host Port | Container Port | Purpose          |
-|-----------|-----------------|-------------------|
-| 3000      | 3000            | HTTP web server   |
+Port Mapping Reference Host Port 3000 maps to Container Port 3000, used for the HTTP web server.
 
----
-
-## Key Learnings (Task 2 Requirements Covered)
-- ✅ Multi-stage Dockerfile authored for a Node.js web app
-- ✅ Final image footprint minimized (only production files in final stage)
-- ✅ Environment variables mapped securely (passed via `-e` flag, not hardcoded)
-- ✅ Functional container port routing defined (`-p` flag)
+Summary of what this task covers Multi-stage Dockerfile written for a Node.js web app Final image size minimized by copying only production files into the final stage Environment variables passed securely at runtime instead of being hardcoded Container port mapping configured correctly Automated CI pipeline set up using GitHub Actions
